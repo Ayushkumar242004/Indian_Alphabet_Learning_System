@@ -10,7 +10,8 @@ import confetti from "canvas-confetti"
 
 interface DrawingCanvasProps {
   alphabet: Alphabet
-  onComplete: (accuracy: number) => void
+  onComplete: (accuracy: number) => void;
+  backgroundSvg: string; 
 }
 
 export default function DrawingCanvas({ alphabet, onComplete }: DrawingCanvasProps) {
@@ -19,7 +20,7 @@ export default function DrawingCanvas({ alphabet, onComplete }: DrawingCanvasPro
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null)
   const [strokes, setStrokes] = useState<Array<{ x: number; y: number; isDrawing: boolean }>>([])
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null)
-
+  const [drawingTimeout, setDrawingTimeout] = useState<NodeJS.Timeout | null>(null);
   // Initialize canvas
   useEffect(() => {
     const canvas = canvasRef.current
@@ -53,97 +54,154 @@ export default function DrawingCanvas({ alphabet, onComplete }: DrawingCanvasPro
     setStrokes([])
     setFeedback(null)
 
-    // Redraw guide pattern
-    if (ctx && alphabet) {
-      drawGuidePattern(ctx, alphabet)
-    }
+    drawGuidePattern(ctx, alphabet);
   }
 
   const drawGuidePattern = (context: CanvasRenderingContext2D, alphabet: Alphabet) => {
     // Draw a faint guide pattern based on the alphabet
-    context.save()
-    context.globalAlpha = 0.15
-    context.lineWidth = 6
-    context.strokeStyle = "#6366f1"
-
+    context.save();
+    context.globalAlpha = 0.15;
+    context.lineWidth = 6;
+    context.strokeStyle = "#6366f1";
+  
     // Draw guide strokes
     alphabet.strokes.forEach((stroke) => {
-      const path = new Path2D(stroke)
-      context.stroke(path)
-    })
-
-    context.restore()
-  }
-
+      const path = new Path2D(stroke);
+      context.stroke(path);
+    });
+  
+    // Draw background letter
+    context.globalAlpha = 0.2; // Make the text more faint
+    context.font = "bold 180px Arial"; // Adjust font size as needed
+    context.fillStyle = "#d1d5db"; // Light gray color
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const { width, height } = context.canvas;
+  
+    if (alphabet.character) {
+      context.fillText(alphabet.character, width / 2, height / 2); // Centered letter
+    }
+  
+    context.restore();
+  };
+  
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true)
+    setIsDrawing(true);
+    
+    // Clear any pending timeout since the child resumed drawing
+    if (drawingTimeout) clearTimeout(drawingTimeout);
 
-    const canvas = canvasRef.current
-    if (!canvas || !ctx) return
+    const canvas = canvasRef.current;
+    if (!canvas || !ctx) return;
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e instanceof MouseEvent ? e.clientX - rect.left : e.touches[0].clientX - rect.left
-    const y = e instanceof MouseEvent ? e.clientY - rect.top : e.touches[0].clientY - rect.top
+    const rect = canvas.getBoundingClientRect();
+    let x: number, y: number;
 
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-
-    setStrokes((prev) => [...prev, { x, y, isDrawing: false }])
-  }
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !ctx || !canvasRef.current) return
-
-    const rect = canvasRef.current.getBoundingClientRect()
-    const x = e instanceof MouseEvent ? e.clientX - rect.left : e.touches[0].clientX - rect.left
-    const y = e instanceof MouseEvent ? e.clientY - rect.top : e.touches[0].clientY - rect.top
-
-    ctx.lineTo(x, y)
-    ctx.stroke()
-
-    setStrokes((prev) => [...prev, { x, y, isDrawing: true }])
-  }
-
-  const endDrawing = () => {
-    setIsDrawing(false)
-    if (ctx) ctx.closePath()
-
-    // Analyze drawing and provide feedback
-    analyzeDrawing()
-  }
-
-  const analyzeDrawing = () => {
-    // Simulate AI analysis of the drawing
-    // In a real implementation, this would use a CNN to compare with the correct stroke pattern
-
-    // For demo purposes, generate a random accuracy score between 60-100
-    const accuracy = Math.floor(Math.random() * 41) + 60
-
-    // Provide feedback based on accuracy
-    if (accuracy > 80) {
-      setFeedback("correct")
-
-      // Trigger confetti for good performance
-      if (canvasRef.current) {
-        const canvas = canvasRef.current
-        const rect = canvas.getBoundingClientRect()
-
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: {
-            x: (rect.left + rect.width / 2) / window.innerWidth,
-            y: (rect.top + rect.height / 2) / window.innerHeight,
-          },
-        })
-      }
+    if ("touches" in e) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
     } else {
-      setFeedback("incorrect")
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
     }
 
-    // Call the onComplete callback with the accuracy score
-    onComplete(accuracy)
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+
+    setStrokes((prev) => [...prev, { x, y, isDrawing: false }]);
+};
+
+
+const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  if (!isDrawing || !ctx || !canvasRef.current) return;
+
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+  
+  // Get the scale factor to handle different screen sizes
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  let x: number, y: number;
+
+  if ("touches" in e) {
+      x = (e.touches[0].clientX - rect.left) * scaleX;
+      y = (e.touches[0].clientY - rect.top) * scaleY;
+  } else {
+      x = (e.clientX - rect.left) * scaleX;
+      y = (e.clientY - rect.top) * scaleY;
   }
+
+  // If starting a new stroke after lifting the pen, reset the path
+  if (strokes.length === 0 || !strokes[strokes.length - 1].isDrawing) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+  }
+
+  ctx.lineTo(x, y);
+  ctx.stroke();
+
+  setStrokes((prev) => [...prev, { x, y, isDrawing: true }]);
+};
+
+const endDrawing = () => {
+  setIsDrawing(false);
+  if (ctx) ctx.closePath();
+
+  // Wait 3 seconds before analyzing, unless the child starts drawing again
+  const timeout = setTimeout(() => {
+      analyzeDrawing();
+  }, 3000);
+
+  setDrawingTimeout(timeout);
+};
+
+const analyzeDrawing = () => {
+  if (strokes.length < 5) {
+      setFeedback("incorrect");
+      onComplete(0);
+      return;
+  }
+
+  // Calculate bounding box of strokes
+  const xValues = strokes.map((s) => s.x);
+  const yValues = strokes.map((s) => s.y);
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+
+  // Check if drawing covers a reasonable area
+  if (width < 50 || height < 50) {
+      setFeedback("incorrect");
+      onComplete(10);
+      return;
+  }
+
+  // Compare strokes with expected pattern (better check)
+  const correctPattern = alphabet.strokes.length; // Expected strokes
+  const drawnPattern = strokes.length;
+
+  // New accuracy calculation with threshold
+  let accuracy = (drawnPattern / correctPattern) * 100;
+
+  // Ensure accuracy stays between 10% and 100%
+  accuracy = Math.max(10, Math.min(100, accuracy));
+
+  // Adjust feedback based on threshold
+  if (accuracy >= 80) {
+      setFeedback("correct");
+      confetti({ particleCount: 100, spread: 70 });
+  } else {
+      setFeedback("incorrect");
+  }
+
+  onComplete(accuracy);
+};
+
 
   return (
     <div className="flex flex-col items-center">

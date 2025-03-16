@@ -47,37 +47,7 @@ export default function AlphabetDisplay({ alphabet, index }: AlphabetDisplayProp
         )}
 
         {/* Animated stroke-by-stroke display */}
-        {showAnimation && (
-          <div className="relative w-full h-full">
-            {alphabet.strokes.map((stroke, idx) => (
-              <motion.div
-                key={idx}
-                className="absolute top-0 left-0 w-full h-full"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{
-                  pathLength: 1,
-                  opacity: 1,
-                  transition: {
-                    delay: idx * 0.5,
-                    duration: 1.5,
-                    ease: "easeInOut",
-                  },
-                }}
-              >
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <path
-                    d={stroke}
-                    fill="none"
-                    stroke={idx % 2 === 0 ? "#8b5cf6" : "#ec4899"}
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </motion.div>
-            ))}
-          </div>
-        )}
+        
       </div>
 
       <div className="mt-4 text-center">
@@ -87,15 +57,7 @@ export default function AlphabetDisplay({ alphabet, index }: AlphabetDisplayProp
         <p className="text-indigo-800 font-medium">{alphabet.pronunciation}</p>
       </div>
 
-      <Button
-        variant="outline"
-        size="lg"
-        className="mt-4 bg-gradient-to-r from-indigo-400 to-purple-400 hover:from-indigo-500 hover:to-purple-500 text-white border-none rounded-full px-6 shadow-md"
-        onClick={() => setShowAnimation(true)}
-      >
-        <Play className="h-4 w-4 mr-2" />
-        Show Strokes
-      </Button>
+     
     </div>
   )
 }
